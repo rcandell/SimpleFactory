@@ -139,10 +139,10 @@ def setup(env, num_things, num_machines, num_stations, worktime, t_inter, tcp_ho
 RANDOM_SEED = 42
 NUM_THINGS = 2**32
 NUM_MACHINES = 4  # number of machines
-NUM_STATIONS = 2  # Number of stations per machine
+NUM_STATIONS = 1  # Number of stations per machine
 WORKTIME = 5      # Minutes at machine
 T_INTER = 2       # Create a thing every NN minutes
-SIM_TIME = 4000     # Simulation time in minutes
+SIM_TIME = 400     # Simulation time in minutes
 
 if __name__ == "__main__":
 
