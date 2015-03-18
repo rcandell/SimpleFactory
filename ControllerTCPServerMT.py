@@ -5,6 +5,7 @@
 # License: Public Domain
 
 
+import sfutils
 from socket import *
 import threading
 
@@ -22,12 +23,15 @@ def handler(clientsocket, clientaddr):
             else:
                 data = data.decode('utf-8')
                 data = data.replace('\n', '')
-                print(data)
+                sfutils.logstr(data)
                 #msg = "You sent me: %s" % data
                 #clientsocket.send(msg.encode('utf-8'))
     clientsocket.close()
 
 if __name__ == "__main__":
+    
+    # initialize the logger
+    sfutils.init_logging('sf_server.log', sfutils.logging.INFO)    
 
     host = 'localhost'
     port = 9999
@@ -39,13 +43,13 @@ if __name__ == "__main__":
 
     serversocket.bind(addr)
 
-    serversocket.listen(200)
+    serversocket.listen(128)
+    print("Server is listening for connections\n")
 
     while 1:
-        print("Server is listening for connections\n")
 
         clientsocket, clientaddr = serversocket.accept()
-        #threading.start_new_thread(handler, (clientsocket, clientaddr))
+
         threading.Thread(target=handler,args=(clientsocket, clientaddr)).start()
 
     # close the socket before exiting
