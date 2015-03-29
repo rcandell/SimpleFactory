@@ -10,14 +10,12 @@ import simpy
 import socket
 import sys
 from enum import Enum
+from builtins import staticmethod
 import sfutils 
 import logging
 import threading
 import addrlist as al
 from SimpleFactoryConfiguration import *
-from builtins import staticmethod
-from h5py.h5t import cfg
-from win32file import SfcGetNextProtectedFile
 
 class EventType(Enum):
 
@@ -32,16 +30,25 @@ class EventType(Enum):
 	DIAGNOSTICS = 100
 
 class SensorMessage(object):
+	
+	SEQ_NUM = 0
+	
 	def __init__(self, part_id=-1, mach_id=-1, rail_id=-1, msg_str="n/a"):
-		self.t = time.clock()
+		self.t = time.time()
+		self.seq_num = self.next_seq_num()
 		self.mach_id = mach_id
 		self.rail_id = rail_id
 		self.part_id = part_id
 		self.msg_str = msg_str
+		
+	def next_seq_num(self):
+		SensorMessage.SEQ_NUM += 1
+		return SensorMessage.SEQ_NUM
 
 	def to_str(self):
 		msg_d = {
-			"time":self.t,
+			"time":str(self.t),
+			"seqnum":self.seq_num,
 			"machine":self.mach_id,
 			"rail":self.rail_id,
 			"part":self.part_id,
@@ -93,10 +100,7 @@ class SensorTCPProxy(threading.Thread):
 		self.send(payload) 
 
 
-	def send(self, payload):
-		#WirelessChannel.acquire_channel()
-		self.seqnum += 1
-		data = str(self.seqnum) + "\t" + payload
+	def send(self, data):
 		try:
 			self.sock.sendall(bytes(data + "\n", 'UTF-8'))
 			# Receive data from the server and shut down

@@ -11,7 +11,7 @@ import threading
 
 def handler(clientsocket, clientaddr):
     sfutils.logstr("Accepted connection")
-    sfutils.logstr(clientsocket) 
+    sfutils.logstr(str(clientsocket)) 
     
     while 1:
         try:
@@ -24,7 +24,7 @@ def handler(clientsocket, clientaddr):
             else:
                 data = data.decode('utf-8')
                 data = data.replace('\n', '')
-                sfutils.logstr(data)
+                sfutils.logstrjson(data)
     
     sfutils.logstr("shutting down socket")
     sfutils.logstr(clientsocket)            
