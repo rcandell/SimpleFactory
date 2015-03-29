@@ -6,12 +6,13 @@
 
 
 import sfutils
-from socket import *
+import socket
 import threading
 
 def handler(clientsocket, clientaddr):
-    print("Accepted connection from: ", clientaddr)
-
+    sfutils.logstr("Accepted connection")
+    sfutils.logstr(clientsocket) 
+    
     while 1:
         try:
             data = clientsocket.recv(1024)
@@ -24,8 +25,10 @@ def handler(clientsocket, clientaddr):
                 data = data.decode('utf-8')
                 data = data.replace('\n', '')
                 sfutils.logstr(data)
-                #msg = "You sent me: %s" % data
-                #clientsocket.send(msg.encode('utf-8'))
+    
+    sfutils.logstr("shutting down socket")
+    sfutils.logstr(clientsocket)            
+    clientsocket.shutdown(socket.SHUT_RDWR)
     clientsocket.close()
 
 if __name__ == "__main__":
@@ -39,7 +42,7 @@ if __name__ == "__main__":
 
     addr = (host, port)
 
-    serversocket = socket(AF_INET, SOCK_STREAM)
+    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     serversocket.bind(addr)
 
@@ -47,10 +50,10 @@ if __name__ == "__main__":
     print("Server is listening for connections\n")
 
     while 1:
-
         clientsocket, clientaddr = serversocket.accept()
-
         threading.Thread(target=handler,args=(clientsocket, clientaddr)).start()
 
     # close the socket before exiting
+    serversocket.shutdown(socket.SHUT_RDWR)
     serversocket.close()
+

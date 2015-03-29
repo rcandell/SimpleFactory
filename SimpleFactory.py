@@ -13,6 +13,7 @@ from enum import Enum
 import sfutils 
 import logging
 import threading
+import addrlist as al
 import json
 from builtins import staticmethod
 
@@ -21,7 +22,7 @@ class EventType(Enum):
 	FACTORY_STARTED = 1
 	MACHINE_CREATED = 10
 	MACHINE_WORK = 11
-	PART_CREATED = 20
+	PART_ENTER_FACTORY = 20
 	PART_ENTER_MACH = 21
 	PART_EXIT_MACH = 22
 	PART_TRAVEL = 23
@@ -50,15 +51,24 @@ class SensorMessage(object):
 class SensorTCPProxy(threading.Thread):
 
 	BIND_ADDRS = [None]
+	
+	class NoBindAddress(Exception):
+		pass
 
-	def __init__(self, env, host='localhost', port=9999, bind_addr=('localhost',0)):
+	def __init__(self, env, remote_addr=('localhost', 9999), bind_addr=None):
 		self.env = env		
 		self.seqnum = 0
-		self.host = host
-		self.port = port
-		self.bind_addr = bind_addr
-		self.sock = 0
+		self.remote_addr = remote_addr
+		
+		if bind_addr == None:
+			raise SensorTCPProxy.NoBindAddress()
+		else:
+			self.bind_addr = bind_addr
+		self.sock = None
 		self.connect()
+		
+	def __del__(self):
+		self.disconnect()
 
 	@staticmethod
 	def add_bind_addrs(l_bind_addrs):
@@ -67,9 +77,10 @@ class SensorTCPProxy(threading.Thread):
 	def connect(self):
 		try:
 			self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 			self.sock.bind(self.bind_addr)
 			sfutils.logstr("socket bind to " + str(self.bind_addr))
-			self.sock.connect((self.host, self.port))
+			self.sock.connect(self.remote_addr)
 			# print("connected")
 		except socket.error as e:
 			print(e)
@@ -77,12 +88,7 @@ class SensorTCPProxy(threading.Thread):
 
 	def send_msg(self, sensor_msg):
 		payload = sensor_msg.to_str()
-		self.send(payload)
-# 		print("Wireless channel request. Cacpacity: %d"%WirelessChannel.capacity)
-# 		with WirelessChannel.request() as ch_req:
-# 			print("wireless channel acquired")
-# 			self.send(payload)
-# 			yield ch_req        
+		self.send(payload) 
 
 
 	def send(self, payload):
@@ -93,27 +99,28 @@ class SensorTCPProxy(threading.Thread):
 			self.sock.sendall(bytes(data + "\n", 'UTF-8'))
 			# Receive data from the server and shut down
 			#received = self.sock.recv(1024)			
-		except socket.error as e:
+		except socket.error:
 			self.sock.close()
-			print(e)
-			print("Reconnecting")
+			sfutils.logstr("reconnecting")
 			self.connect()
 
 		except socket.timeout as ex:
-			logging.info("socket connection timeout")
+			logging.info("socket connection timer expired")
 			logging.info(ex)	
 
-	def close(self):
-		self.sock.close()
+	def disconnect(self):
+		if self.sock != None:
+			self.sock.shutdown(socket.SHUT_RDWR)
+			self.sock.close()
 
 class Rail(object):
 	""" A Rail represents the delay between to machine stations """
-	def __init__(self, env, mach_id, t_delay, tcp_host, tcp_port):
+	def __init__(self, env, mach_id, t_delay, remote_addr):
 		self.env = env
 		self.t_delay = t_delay
 		self.mach_id = mach_id
 		self.rail = simpy.Resource(env,1) # one path out from machine
-		self.tcpclient = SensorTCPProxy(self.env, tcp_host, tcp_port)
+		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
 
 	def travel(self, part_id):
 		
@@ -127,13 +134,18 @@ class Rail(object):
 
 class Machine(object):
 	""" Machines do work on Part objects """
-	def __init__(self, env, mach_id, worktime, num_stations, rail_delay, tcp_host, tcp_port):
+	def __init__(self, env, mach_id, worktime, num_stations, rail_delay, remote_addr):
 		self.env = env
 		self.mach_id = mach_id
 		self.worktime = worktime
 		self.station = simpy.Resource(env, num_stations)
-		self.rail = Rail(env, mach_id, rail_delay, tcp_host, tcp_port)
-		self.tcpclient = SensorTCPProxy(self.env, tcp_host, tcp_port)
+		self.rail = Rail(env, mach_id, rail_delay, remote_addr)
+		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
+		
+	def part_enters(self, part_id):
+		sfutils.loginfo(EventType.PART_ENTER_MACH, env, self.mach_id, part_id, "part entered machine")
+		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str="part entered machine")
+		self.tcpclient.send_msg(msg)		
 
 	def work(self, part_id):
 
@@ -158,7 +170,7 @@ def Part(env, part_id, machines, output_store):
 	for mach in machines:
 		with mach.station.request() as station_request:
 			yield station_request
-			sfutils.loginfo(EventType.PART_ENTER_MACH, env, mach.mach_id, part_id, "part enters machine")
+			mach.part_enters(part_id)
 			yield env.process(mach.work(part_id))
 			sfutils.loginfo(EventType.PART_EXIT_MACH, env, mach.mach_id, part_id, "part exits machine")
 			with mach.rail.rail.request() as rail_request:
@@ -176,7 +188,7 @@ def Part(env, part_id, machines, output_store):
 
 class Factory(object):
 
-	def __init__(self, num_parts, num_machines, num_stations, worktime, t_inter, tcp_host, tcp_port, output_store_sz=10000):
+	def __init__(self, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
 
 		# parameters
 		self.num_parts = num_parts
@@ -184,8 +196,7 @@ class Factory(object):
 		self.num_stations = num_stations
 		self.worktime = worktime
 		self.t_inter = t_inter
-		self.tcp_host = tcp_host
-		self.tcp_port = tcp_port
+		self.remote_addr = remote_addr
 		self.output_store_sz = output_store_sz
 
 	def run(self, env):
@@ -197,13 +208,13 @@ class Factory(object):
 		machines = []
 		rail_delays = [random.randint(1,3) for r in range(self.num_machines)]
 		for mach_id in range(self.num_machines):
-			m = Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.tcp_host, self.tcp_port)
+			m = Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
 			machines.append(m)
 			# sfutils.logstr("Added machine %u" % mach_id)
 
 		# create the storage bin for product output
 		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
-		sfutils.loginfo(EventType.PART_CREATED, env, -1, -1, "output storage container created with size %d"%output_store.capacity)
+		sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, -1, -1, "output storage container created with size %d"%output_store.capacity)
 
 		# Create more parts while the simulation is running
 		part_id = 0
@@ -216,7 +227,7 @@ class Factory(object):
 			# produce new part on the line
 			if part_id < self.num_parts:
 				env.process(Part(env, part_id, machines, output_store))
-				sfutils.loginfo(EventType.PART_CREATED, env, -1, part_id, "part created")
+				sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, -1, part_id, "part created")
 
 				# increment to next part number
 				part_id += 1		
@@ -231,8 +242,8 @@ if __name__ == "__main__":
 
 	# run in real-time
 	RUN_RT = True
-	SIM_RT_FACTOR = 1.0 	# 
-	SIM_TIME = 400     		# Simulation time in minutes	
+	SIM_RT_FACTOR = 1.0 	# Wall clock multiplier  
+	SIM_TIME = 5*24*3600     	# Simulation time in minutes	
 
 	# model parameters
 	RANDOM_SEED = 42
@@ -242,7 +253,22 @@ if __name__ == "__main__":
 	WORKTIME = 5      # seconds at each machine
 	T_INTER = 2       # Create a part every NN minutes
 
-	HOST, PORT = "localhost", 9999
+	REMOTE_ADDR = ("localhost", 9999)
+	
+	# load the addresses for each ENET adapter
+	bind_host = '127.0.0.1'
+	some_addrs = [
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0),
+		(bind_host,0)]	
+	al.add_addrs(some_addrs)
 
 	logging.basicConfig(filename='sf_plant.log', level=logging.INFO)
 
@@ -251,7 +277,7 @@ if __name__ == "__main__":
 
 	# Create an environment and start the setup process
 	if RUN_RT:
-		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=True)
+		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=False)
 	else:
 		env = simpy.Environment()
 
@@ -260,10 +286,8 @@ if __name__ == "__main__":
 	WirelessChannel = simpy.Resource(env,1)
 
 	# create the factory
-	# env.process(setup(env, NUM_THINGS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, HOST, PORT))
-	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, HOST, PORT)
+	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
 	factory.run(env)
-	# env.process(setup(env, NUM_THINGS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, HOST, PORT))
 
 	# Execute simulation
 	env.run(until=SIM_TIME)
