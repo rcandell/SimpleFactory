@@ -1,0 +1,28 @@
+{
+    "RANDOM_SEED": 42,
+    "RUN_RT" : true,
+    "SIM_RT_FACTOR" : 1.0,
+    "SIM_TIME" : 86400, 
+    "NUM_PARTS" : 10E6,
+    "NUM_MACHINES" : 4, 
+    "NUM_STATIONS" : 1,  
+    "WORKTIME" : 5,      
+    "T_INTER" : 2,       
+        
+    "server_addr": {
+        "host": "127.0.0.1",
+        "port": 9999},
+        
+    "client_addrs" : [
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},
+        {"host":"127.0.0.1", "port":0},      
+        {"host":"127.0.0.1", "port":0}
+    ]
+}
+

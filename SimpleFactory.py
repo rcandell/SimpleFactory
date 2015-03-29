@@ -14,8 +14,10 @@ import sfutils
 import logging
 import threading
 import addrlist as al
-import json
+from SimpleFactoryConfiguration import *
 from builtins import staticmethod
+from h5py.h5t import cfg
+from win32file import SfcGetNextProtectedFile
 
 class EventType(Enum):
 
@@ -240,43 +242,38 @@ def init_bind_addrs():
 
 if __name__ == "__main__":
 
-	# run in real-time
-	RUN_RT = True
-	SIM_RT_FACTOR = 1.0 	# Wall clock multiplier  
-	SIM_TIME = 5*24*3600     	# Simulation time in minutes	
-
-	# model parameters
-	RANDOM_SEED = 42
-	NUM_PARTS = 10E6
-	NUM_MACHINES = 4  # number of machines
-	NUM_STATIONS = 1  # Number of stations per machine
-	WORKTIME = 5      # seconds at each machine
-	T_INTER = 2       # Create a part every NN minutes
-
-	REMOTE_ADDR = ("localhost", 9999)
+	print('Simple Factory')
+	
+	# network configuration
+	sfc = SimpleFactoryConfiguration()
+	RANDOM_SEED = sfc.RANDOM_SEED
+	random.seed(RANDOM_SEED)
+	
+	RUN_RT = sfc.RUN_RT
+	SIM_RT_FACTOR = sfc.SIM_RT_FACTOR 	
+	SIM_TIME = sfc.SIM_TIME     		
+	NUM_PARTS = sfc.NUM_PARTS
+	NUM_MACHINES = sfc.NUM_MACHINES
+	NUM_STATIONS = sfc.NUM_STATIONS
+	WORKTIME = sfc.WORKTIME
+	T_INTER = sfc.T_INTER
+	
+	# remote server address
+	REMOTE_ADDR = sfc.server_addr
 	
 	# load the addresses for each ENET adapter
-	bind_host = '127.0.0.1'
-	some_addrs = [
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0),
-		(bind_host,0)]	
-	al.add_addrs(some_addrs)
+	client_addrs = sfc.client_addrs	
+	if len(client_addrs) < NUM_MACHINES*2:
+		sys.stderr.write('not enough local addresses for the number of sensors')
+		sys.exit(0)	
+	al.add_addrs(client_addrs)
 
+	# configure the logging utility for the plant process
 	logging.basicConfig(filename='sf_plant.log', level=logging.INFO)
-
-	print('Simple Factory')
-	random.seed(RANDOM_SEED)  # This helps reproducing the results
 
 	# Create an environment and start the setup process
 	if RUN_RT:
+		sfutils.logstr("attempting to run in real-time with wall clock")
 		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=False)
 	else:
 		env = simpy.Environment()
