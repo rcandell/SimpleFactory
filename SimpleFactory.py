@@ -103,6 +103,7 @@ class SensorTCPProxy(threading.Thread):
 	def send(self, data):
 		try:
 			self.sock.sendall(bytes(data + "\n", 'UTF-8'))
+			sfutils.logstr(msg=data, screen=False)
 			# Receive data from the server and shut down
 			#received = self.sock.recv(1024)			
 		except socket.error:

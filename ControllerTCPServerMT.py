@@ -15,11 +15,14 @@ def handler(clientsocket, clientaddr):
     
     while 1:
         try:
+            data = None
             data = clientsocket.recv(1024)
+            if not data:
+                break
         except Exception as e:
             print(e)
         finally:
-            if not data:
+            if data is None:
                 break
             else:
                 data = data.decode('utf-8')
@@ -27,7 +30,7 @@ def handler(clientsocket, clientaddr):
                 sfutils.logstrjson(data)
     
     sfutils.logstr("shutting down socket")
-    sfutils.logstr(clientsocket)            
+    sfutils.logstr(str(clientsocket))            
     clientsocket.shutdown(socket.SHUT_RDWR)
     clientsocket.close()
 
