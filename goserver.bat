@@ -1,2 +1,2 @@
 del *.log
-call start python ControllerTCPServerMT.py
+call start python SimpleFactoryController.py

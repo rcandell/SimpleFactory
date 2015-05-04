@@ -1,2 +1,2 @@
 del *.log
-call start python SimpleFactory.py
+call start python SimpleFactoryFloor.py
