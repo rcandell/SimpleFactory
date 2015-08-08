@@ -3,7 +3,7 @@
     "RUN_RT" : true,
     "SIM_RT_FACTOR" : 1.0,
     "SIM_TIME" : 86400, 
-    "NUM_PARTS" : 1,
+    "NUM_PARTS" : 100,
     "NUM_MACHINES" : 4, 
     "NUM_STATIONS" : 1,  
     "WORKTIME" : 5,      
