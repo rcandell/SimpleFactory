@@ -6,7 +6,7 @@ def init_logging(fname, level=logging.INFO):
 	logging.basicConfig(filename=fname, level=level)
 
 def logheader():
-	log_str = "wall_clock, sim_time, log_code, machine_id, part_id, text_msg"
+	log_str = "wall_clock\tsim_time\tlog_code\tmachine_id\tpart_id\ttext_msg"
 	print(log_str)
 	logging.info(log_str)
 

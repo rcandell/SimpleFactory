@@ -212,6 +212,7 @@ class Factory(object):
 		env.process(self.setup(env))
 
 	def setup(self, env):
+
 		""" Create the factory architecture """
 		machines = []
 		#Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
@@ -235,21 +236,19 @@ class Factory(object):
 
 		# Create more parts while the simulation is running
 		part_id = 0
-		while True:
+		while part_id < self.num_parts:
 					
 			# wait until the next part is ready (basic delay)
 			#yield env.timeout(random.randint(t_inter-2, t_inter+2))
 			yield env.timeout(self.t_inter)
 
 			# produce new part on the line
-			if part_id < self.num_parts:
-				env.process(Part(env, part_id, machines, output_store))
-				sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, part_id, "part created")
+			env.process(Part(env, part_id, machines, output_store))
+			sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, part_id, "part created")
 
-				# increment to next part number
-				part_id += 1		
-			else:
-				return
+			# increment to next part number
+			part_id += 1	
+	
 
 
 def init_bind_addrs():
@@ -296,15 +295,17 @@ if __name__ == "__main__":
 	else:
 		env = simpy.Environment()
 
+	'''
 	# create the wireless channel with N available channels
 	global WirelessChannel
 	WirelessChannel = simpy.Resource(env,1)
+	'''
 
 	# create the factory
 	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
 	factory.run(env)
 
 	# Execute simulation
-	env.run(until=SIM_TIME)
+	env.run()
 
 

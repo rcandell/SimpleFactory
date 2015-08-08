@@ -7,7 +7,7 @@ Created on Mar 29, 2015
 import json
 
 class SimpleFactoryConfiguration:
-    def __init__(self, path="sfclient.json"):
+    def __init__(self, path="factory_config.json"):
         self.client_addrs = []
         with open(path) as data_file:    
             self.data = json.load(data_file)
@@ -17,7 +17,7 @@ class SimpleFactoryConfiguration:
         self.RANDOM_SEED= self.data["RANDOM_SEED"]
         self.RUN_RT = self.data["RUN_RT"]
         self.SIM_RT_FACTOR= self.data["SIM_RT_FACTOR"]
-        self.SIM_TIME= self.data["SIM_TIME"]
+        #self.SIM_TIME= self.data["SIM_TIME"]
         self.NUM_PARTS= self.data["NUM_PARTS"]
         self.NUM_MACHINES= self.data["NUM_MACHINES"] 
         self.NUM_STATIONS= self.data["NUM_STATIONS"] 
