@@ -33,7 +33,7 @@ class SensorMessage(object):
 	
 	SEQ_NUM = 0
 	
-	def __init__(self, part_id=-1, mach_id=-1, rail_id=-1, msg_str="n/a"):
+	def __init__(self, part_id=None, mach_id=None, rail_id=None, msg_str="n/a"):
 		self.t = time.time()
 		self.seq_num = self.next_seq_num()
 		self.mach_id = mach_id
@@ -122,12 +122,12 @@ class SensorTCPProxy(threading.Thread):
 
 class Rail(object):
 	""" A Rail represents the delay between to machine stations """
-	def __init__(self, env, mach_id, t_delay, remote_addr):
+	def __init__(self, env, mach_id, t_delay, remote_addr, bind_addr):
 		self.env = env
 		self.t_delay = t_delay
 		self.mach_id = mach_id
 		self.rail = simpy.Resource(env,1) # one path out from machine
-		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
+		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=bind_addr)
 
 	def travel(self, part_id):
 		
@@ -141,13 +141,14 @@ class Rail(object):
 
 class Machine(object):
 	""" Machines do work on Part objects """
-	def __init__(self, env, mach_id, worktime, num_stations, rail_delay, remote_addr):
+	def __init__(self, env, mach_id, worktime, num_stations, rail_delay, remote_addr, bind_addr=('127.0.0.1',0)):
 		self.env = env
 		self.mach_id = mach_id
 		self.worktime = worktime
 		self.station = simpy.Resource(env, num_stations)
-		self.rail = Rail(env, mach_id, rail_delay, remote_addr)
-		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
+		self.rail = Rail(env, mach_id, rail_delay, remote_addr, bind_addr)
+		#self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
+		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=bind_addr)
 		
 	def part_enters(self, part_id):
 		sfutils.loginfo(EventType.PART_ENTER_MACH, env, self.mach_id, part_id, "part entered machine")
@@ -186,11 +187,11 @@ def Part(env, part_id, machines, output_store):
 				yield env.process(mach.rail.travel(part_id))
 	
 	# store the product
-	sfutils.loginfo(EventType.PRODUCT_STORED, env, -1, part_id, "part stored as product")
+	sfutils.loginfo(EventType.PRODUCT_STORED, env, None, part_id, "part stored as product")
 	output_store.put(1)
 
 	# tally the number of products in log file
-	sfutils.loginfo(EventType.DIAGNOSTICS, env, -1, -1, "number of products " + str(output_store.level))
+	sfutils.loginfo(EventType.DIAGNOSTICS, env, None, None, "number of products " + str(output_store.level))
 
 
 class Factory(object):
@@ -207,21 +208,30 @@ class Factory(object):
 		self.output_store_sz = output_store_sz
 
 	def run(self, env):
-		sfutils.loginfo(EventType.FACTORY_STARTED, env, -1, -1, "factory starting")		
+		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
 		env.process(self.setup(env))
 
 	def setup(self, env):
 		""" Create the factory architecture """
 		machines = []
+		#Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
+		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
+		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
+		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
+
+		""" Create the factory architecture """
+		'''
+		machines = []
 		rail_delays = [random.randint(1,3) for r in range(self.num_machines)]
 		for mach_id in range(self.num_machines):
 			m = Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
 			machines.append(m)
-			# sfutils.logstr("Added machine %u" % mach_id)
+			# sfutils.logstr("Added machine %u" % mach_id) 
+		'''
 
 		# create the storage bin for product output
 		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
-		sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, -1, -1, "output storage container created with size %d"%output_store.capacity)
+		sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, None, "output storage container created with size %d"%output_store.capacity)
 
 		# Create more parts while the simulation is running
 		part_id = 0
@@ -234,7 +244,7 @@ class Factory(object):
 			# produce new part on the line
 			if part_id < self.num_parts:
 				env.process(Part(env, part_id, machines, output_store))
-				sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, -1, part_id, "part created")
+				sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, part_id, "part created")
 
 				# increment to next part number
 				part_id += 1		
@@ -267,14 +277,17 @@ if __name__ == "__main__":
 	REMOTE_ADDR = sfc.server_addr
 	
 	# load the addresses for each ENET adapter
+	'''
 	client_addrs = sfc.client_addrs	
 	if len(client_addrs) < NUM_MACHINES*2:
 		sys.stderr.write('not enough local addresses for the number of sensors')
 		sys.exit(0)	
 	al.add_addrs(client_addrs)
+	'''
 
 	# configure the logging utility for the plant process
 	logging.basicConfig(filename='sf_plant.log', level=logging.INFO)
+	sfutils.logheader()
 
 	# Create an environment and start the setup process
 	if RUN_RT:
