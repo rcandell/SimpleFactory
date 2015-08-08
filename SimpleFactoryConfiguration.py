@@ -17,7 +17,6 @@ class SimpleFactoryConfiguration:
         self.RANDOM_SEED= self.data["RANDOM_SEED"]
         self.RUN_RT = self.data["RUN_RT"]
         self.SIM_RT_FACTOR= self.data["SIM_RT_FACTOR"]
-        #self.SIM_TIME= self.data["SIM_TIME"]
         self.NUM_PARTS= self.data["NUM_PARTS"]
         self.NUM_MACHINES= self.data["NUM_MACHINES"] 
         self.NUM_STATIONS= self.data["NUM_STATIONS"] 

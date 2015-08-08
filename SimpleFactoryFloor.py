@@ -265,7 +265,6 @@ if __name__ == "__main__":
 	
 	RUN_RT = sfc.RUN_RT
 	SIM_RT_FACTOR = sfc.SIM_RT_FACTOR 	
-	SIM_TIME = sfc.SIM_TIME     		
 	NUM_PARTS = sfc.NUM_PARTS
 	NUM_MACHINES = sfc.NUM_MACHINES
 	NUM_STATIONS = sfc.NUM_STATIONS
