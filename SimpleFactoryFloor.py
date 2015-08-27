@@ -5,7 +5,6 @@
 # License: Public Domain
 
 import time
-import random
 import simpy
 import socket
 import sys
@@ -14,19 +13,29 @@ from builtins import staticmethod
 import sfutils 
 import logging
 import threading
-import addrlist as al
 from SimpleFactoryConfiguration import *
+from numpy import random
 
 class EventType(Enum):
 
+	# factory info
 	FACTORY_STARTED = 1
 	MACHINE_CREATED = 10
+	
+	# machine info
 	MACHINE_WORK = 11
+	MACHINE_DONE = 12
+	
+	# part info
 	PART_ENTER_FACTORY = 20
 	PART_ENTER_MACH = 21
 	PART_EXIT_MACH = 22
 	PART_TRAVEL = 23
+	
+	# product info
 	PRODUCT_STORED = 50
+	
+	# diagnostic info
 	DIAGNOSTICS = 100
 
 class SensorMessage(object):
@@ -85,12 +94,15 @@ class SensorTCPProxy(threading.Thread):
 
 	def connect(self):
 		try:
-			self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-			self.sock.bind(self.bind_addr)
-			sfutils.logstr("socket bind to " + str(self.bind_addr))
-			self.sock.connect(self.remote_addr)
-			# print("connected")
+			#print("Remote addr: \n" + self.remote_addr[0] + "\n" + str(self.remote_addr[1]))
+			#print("Bind addr: \n" + self.bind_addr[0] + "\n" + str(self.bind_addr[1]))			
+			#self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			#self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+			#self.sock.bind(self.bind_addr)
+			#sfutils.logstr("socket bind to " + str(self.bind_addr))
+			#self.sock.connect(self.remote_addr)
+			self.sock = socket.create_connection(self.remote_addr, 10, self.bind_addr)
+			sfutils.logstr("connected to" + str(self.remote_addr))
 		except socket.error as e:
 			print(e)
 			sys.exit(1)
@@ -106,8 +118,12 @@ class SensorTCPProxy(threading.Thread):
 			sfutils.logstr(msg=data, screen=False)
 			# Receive data from the server and shut down
 			#received = self.sock.recv(1024)			
-		except socket.error:
+		except socket.error as ex:
+			sfutils.logstr("socket error")
+			logging.info(ex)	
+			print(ex)
 			self.sock.close()
+			self.sock = None
 			sfutils.logstr("reconnecting")
 			self.connect()
 
@@ -131,7 +147,7 @@ class Rail(object):
 
 	def travel(self, part_id):
 		
-		# optical prximity sensor reading
+		# optical proximity sensor reading
 		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str="part in transit")
 		self.tcpclient.send_msg(msg)	
 
@@ -145,6 +161,7 @@ class Machine(object):
 		self.env = env
 		self.mach_id = mach_id
 		self.worktime = worktime
+		self.num_parts = 0
 		self.station = simpy.Resource(env, num_stations)
 		self.rail = Rail(env, mach_id, rail_delay, remote_addr, bind_addr)
 		#self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
@@ -156,8 +173,12 @@ class Machine(object):
 		self.tcpclient.send_msg(msg)		
 
 	def work(self, part_id):
+		
+		# calculate machine wait time for this iteration
+		scale = 0.2*self.worktime # 20% of average worktime for machine
+		this_work_time = self.worktime + scale*(random.rand()-0.5) 
 
-		# TODO: Place machine sensor reading here TCP
+		# send msg that machine is working
 		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str="machine working")
 		self.tcpclient.send_msg(msg)
 
@@ -166,10 +187,15 @@ class Machine(object):
 		
 		# do the work
 		sfutils.loginfo(EventType.MACHINE_WORK, env, self.mach_id, part_id, "machine working")
-		work_done = self.env.timeout(self.worktime)
+		yield self.env.timeout(this_work_time)	
 
-		# finish the machining work
-		yield work_done
+		# transmit that machine is done
+		machine_done_str = "machine done" + \
+			", worktime: " + str(this_work_time) + \
+			", num_parts: " + str(self.num_parts)
+		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str=machine_done_str)
+		self.tcpclient.send_msg(msg)
+		sfutils.loginfo(EventType.MACHINE_DONE, env, self.mach_id, part_id, machine_done_str)
 
 # generator function for a part
 def Part(env, part_id, machines, output_store):
@@ -177,13 +203,18 @@ def Part(env, part_id, machines, output_store):
 		Work is done and part leaves to never come back """
 	for mach in machines:
 		with mach.station.request() as station_request:
+			
 			yield station_request
 			mach.part_enters(part_id)
+			
 			yield env.process(mach.work(part_id))
 			sfutils.loginfo(EventType.PART_EXIT_MACH, env, mach.mach_id, part_id, "part exits machine")
+			
 			with mach.rail.rail.request() as rail_request:
+				
 				yield rail_request
 				sfutils.loginfo(EventType.PART_TRAVEL, env, mach.mach_id, part_id, "part in transit")
+				
 				yield env.process(mach.rail.travel(part_id))
 	
 	# store the product
@@ -206,6 +237,9 @@ class Factory(object):
 		self.t_inter = t_inter
 		self.remote_addr = remote_addr
 		self.output_store_sz = output_store_sz
+		
+	def __str__(self, *args, **kwargs):
+		return object.__str__(self, *args, **kwargs)
 
 	def run(self, env):
 		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
@@ -215,20 +249,9 @@ class Factory(object):
 
 		""" Create the factory architecture """
 		machines = []
-		#Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
-		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
-		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
-		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('127.0.0.1',0)))
-
-		""" Create the factory architecture """
-		'''
-		machines = []
-		rail_delays = [random.randint(1,3) for r in range(self.num_machines)]
-		for mach_id in range(self.num_machines):
-			m = Machine(env, mach_id, self.worktime, self.num_stations, rail_delays[mach_id], self.remote_addr)
-			machines.append(m)
-			# sfutils.logstr("Added machine %u" % mach_id) 
-		'''
+		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.101',0)))
+		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.102',0)))
+		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.103',0)))
 
 		# create the storage bin for product output
 		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
@@ -251,8 +274,8 @@ class Factory(object):
 	
 
 
-def init_bind_addrs():
-	SensorTCPProxy.BIND_ADDRS.append(('127.0.0.1',0))
+# def init_bind_addrs():
+	# SensorTCPProxy.BIND_ADDRS.append(('127.0.0.1',0))
 
 if __name__ == "__main__":
 
@@ -274,15 +297,6 @@ if __name__ == "__main__":
 	# remote server address
 	REMOTE_ADDR = sfc.server_addr
 	
-	# load the addresses for each ENET adapter
-	'''
-	client_addrs = sfc.client_addrs	
-	if len(client_addrs) < NUM_MACHINES*2:
-		sys.stderr.write('not enough local addresses for the number of sensors')
-		sys.exit(0)	
-	al.add_addrs(client_addrs)
-	'''
-
 	# configure the logging utility for the plant process
 	logging.basicConfig(filename='sf_plant.log', level=logging.INFO)
 	sfutils.logheader()
@@ -293,12 +307,6 @@ if __name__ == "__main__":
 		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=False)
 	else:
 		env = simpy.Environment()
-
-	'''
-	# create the wireless channel with N available channels
-	global WirelessChannel
-	WirelessChannel = simpy.Resource(env,1)
-	'''
 
 	# create the factory
 	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
