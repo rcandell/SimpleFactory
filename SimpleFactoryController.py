@@ -45,11 +45,10 @@ if __name__ == "__main__":
 
 	#print( "Server address is: " + host + ":" + port   )
 	addr = (host, port)
-	#print( "Server address is: " + addr[0] + ":" + str(addr[1])   )
+	print( "Server address is: " + addr[0] + ":" + str(addr[1])   )
 
 	serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	serversocket.bind(addr)
-	#print("Bind to: \n" + host + ":" + str(port))
 
 	serversocket.listen(128)
 	print("Server is listening for connections\n")
