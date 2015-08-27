@@ -175,7 +175,7 @@ class Machine(object):
 	def work(self, part_id):
 		
 		# calculate machine wait time for this iteration
-		scale = 0.2*self.worktime # 20% of average worktime for machine
+		scale = 0.2*self.worktime # 20% of average work time for machine
 		this_work_time = self.worktime + scale*(random.rand()-0.5) 
 
 		# send msg that machine is working
@@ -191,7 +191,7 @@ class Machine(object):
 
 		# transmit that machine is done
 		machine_done_str = "machine done" + \
-			", worktime: " + str(this_work_time) + \
+			", work_time: " + str(this_work_time) + \
 			", num_parts: " + str(self.num_parts)
 		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str=machine_done_str)
 		self.tcpclient.send_msg(msg)
@@ -252,6 +252,7 @@ class Factory(object):
 		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.101',0)))
 		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.102',0)))
 		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.103',0)))
+		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.104',0)))
 
 		# create the storage bin for product output
 		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
@@ -260,10 +261,11 @@ class Factory(object):
 		# Create more parts while the simulation is running
 		part_id = 0
 		while part_id < self.num_parts:
-					
-			# wait until the next part is ready (basic delay)
-			#yield env.timeout(random.randint(t_inter-2, t_inter+2))
-			yield env.timeout(self.t_inter)
+			
+			# calculate wait time between parts
+			scale = 0.2*self.t_inter # 20% of average 
+			this_inter = self.t_inter + scale*(random.rand()-0.5) 
+			yield env.timeout(this_inter)
 
 			# produce new part on the line
 			env.process(Part(env, part_id, machines, output_store))
