@@ -27,7 +27,7 @@ def handler(clientsocket, clientaddr):
             else:
                 data = data.decode('utf-8')
                 data = data.replace('\n', '')
-                sfutils.logstrjson(data)
+                sfutils.logstrtabdelim(data)
     
     sfutils.logstr("shutting down socket")
     sfutils.logstr(str(clientsocket))            
@@ -36,27 +36,29 @@ def handler(clientsocket, clientaddr):
 
 if __name__ == "__main__":
     
-    # initialize the logger
-    sfutils.init_logging('sf_server.log', sfutils.logging.INFO)    
+	# initialize the logger
+	sfutils.init_logging('sf_server.log', sfutils.logging.INFO)    
 
-    host = 'localhost'
-    port = 9999
-    buf = 1024
+	host = '10.10.0.100'
+	port = 19999
+	buf = 1024
 
-    addr = (host, port)
+	#print( "Server address is: " + host + ":" + port   )
+	addr = (host, port)
+	#print( "Server address is: " + addr[0] + ":" + str(addr[1])   )
 
-    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	serversocket.bind(addr)
+	#print("Bind to: \n" + host + ":" + str(port))
 
-    serversocket.bind(addr)
+	serversocket.listen(128)
+	print("Server is listening for connections\n")
 
-    serversocket.listen(128)
-    print("Server is listening for connections\n")
+	while 1:
+		clientsocket, clientaddr = serversocket.accept()
+		threading.Thread(target=handler,args=(clientsocket, clientaddr)).start()
 
-    while 1:
-        clientsocket, clientaddr = serversocket.accept()
-        threading.Thread(target=handler,args=(clientsocket, clientaddr)).start()
-
-    # close the socket before exiting
-    serversocket.shutdown(socket.SHUT_RDWR)
-    serversocket.close()
+	# close the socket before exiting
+	serversocket.shutdown(socket.SHUT_RDWR)
+	serversocket.close()
 

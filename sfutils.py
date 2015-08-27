@@ -29,4 +29,11 @@ def logstrjson(msg, screen=True):
 	if screen is True:
 		print(msg)
 		
+def logstrtabdelim(msg, screen=True):
+	msg = str(time.time()) + "\t" + msg
+	logging.info(msg)
+	if screen is True:
+		print(msg)
+	
+		
 		
