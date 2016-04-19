@@ -23,6 +23,7 @@ class SimpleFactoryConfiguration:
         self.WORKTIME= self.data["WORKTIME"]      
         self.T_INTER= self.data["T_INTER"]  
         self.server_addr = (self.data['server_addr']['host'], self.data['server_addr']['port'])
+        self.client_addrs = self.data['client_addrs']
         '''
         for ii in range(0, len(self.data['client_addrs'])):
             host = self.data['client_addrs'][ii]['host']

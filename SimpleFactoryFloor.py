@@ -227,7 +227,7 @@ def Part(env, part_id, machines, output_store):
 
 class Factory(object):
 
-	def __init__(self, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
+	def __init__(self, sfc, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
 
 		# parameters
 		self.num_parts = num_parts
@@ -237,22 +237,28 @@ class Factory(object):
 		self.t_inter = t_inter
 		self.remote_addr = remote_addr
 		self.output_store_sz = output_store_sz
+		self.sfc = sfc
 		
 	def __str__(self, *args, **kwargs):
 		return object.__str__(self, *args, **kwargs)
 
 	def run(self, env):
 		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
-		env.process(self.setup(env))
+		env.process(self.setup(env, self.sfc))
 
-	def setup(self, env):
+	def setup(self, env, sfc):
 
 		""" Create the factory architecture """
 		machines = []
-		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.101',0)))
-		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.102',0)))
-		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.103',0)))
-		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.10.0.104',0)))
+		#machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.101',0)))
+		#machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.102',0)))
+		#machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.103',0)))
+		#machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.104',0)))
+		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[0],0)))
+		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[1],0)))
+		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[2],0)))
+		machines.append(Machine(env, 4, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[3],0)))
+
 
 		# create the storage bin for product output
 		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
@@ -285,6 +291,7 @@ if __name__ == "__main__":
 	
 	# network configuration
 	sfc = SimpleFactoryConfiguration()
+	print(sfc.client_addrs)
 	RANDOM_SEED = sfc.RANDOM_SEED
 	random.seed(RANDOM_SEED)
 	
@@ -311,7 +318,7 @@ if __name__ == "__main__":
 		env = simpy.Environment()
 
 	# create the factory
-	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
+	factory = Factory(sfc, NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
 	factory.run(env)
 
 	# Execute simulation
