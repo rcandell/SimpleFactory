@@ -16,6 +16,8 @@ import threading
 from SimpleFactoryConfiguration import *
 from numpy import random
 
+sfc = None
+
 class EventType(Enum):
 
 	# factory info
@@ -227,7 +229,7 @@ def Part(env, part_id, machines, output_store):
 
 class Factory(object):
 
-	def __init__(self, sfc, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
+	def __init__(self, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
 
 		# parameters
 		self.num_parts = num_parts
@@ -237,16 +239,15 @@ class Factory(object):
 		self.t_inter = t_inter
 		self.remote_addr = remote_addr
 		self.output_store_sz = output_store_sz
-		self.sfc = sfc
 		
 	def __str__(self, *args, **kwargs):
 		return object.__str__(self, *args, **kwargs)
 
 	def run(self, env):
 		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
-		env.process(self.setup(env, self.sfc))
+		env.process(self.setup(env))
 
-	def setup(self, env, sfc):
+	def setup(self, env):
 
 		""" Create the factory architecture """
 		machines = []
@@ -291,7 +292,7 @@ if __name__ == "__main__":
 	
 	# network configuration
 	sfc = SimpleFactoryConfiguration()
-	print(sfc.client_addrs)
+	#print(sfc.client_addrs)
 	RANDOM_SEED = sfc.RANDOM_SEED
 	random.seed(RANDOM_SEED)
 	
@@ -318,7 +319,7 @@ if __name__ == "__main__":
 		env = simpy.Environment()
 
 	# create the factory
-	factory = Factory(sfc, NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
+	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
 	factory.run(env)
 
 	# Execute simulation
