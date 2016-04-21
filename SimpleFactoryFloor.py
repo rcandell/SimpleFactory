@@ -15,6 +15,7 @@ import logging
 import threading
 from SimpleFactoryConfiguration import *
 from numpy import random
+from queue import Queue
 
 sfc = None
 
@@ -76,9 +77,12 @@ class SensorTCPProxy(threading.Thread):
 		pass
 
 	def __init__(self, env, remote_addr=('localhost', 9999), bind_addr=None):
+		threading.Thread.__init__(self,target=self.thread_worker, daemon=True)
+		self.msg_queue = Queue(maxsize=10)
 		self.env = env		
 		self.seqnum = 0
 		self.remote_addr = remote_addr
+		self.thread_name = super(SensorTCPProxy,self).getName()
 		
 		if bind_addr == None:
 			raise SensorTCPProxy.NoBindAddress()
@@ -86,6 +90,7 @@ class SensorTCPProxy(threading.Thread):
 			self.bind_addr = bind_addr
 		self.sock = None
 		self.connect()
+		super(SensorTCPProxy,self).start()
 		
 	def __del__(self):
 		self.disconnect()
@@ -97,14 +102,10 @@ class SensorTCPProxy(threading.Thread):
 	def connect(self):
 		try:
 			#print("Remote addr: \n" + self.remote_addr[0] + "\n" + str(self.remote_addr[1]))
-			#print("Bind addr: \n" + self.bind_addr[0] + "\n" + str(self.bind_addr[1]))			
-			#self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			#self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-			#self.sock.bind(self.bind_addr)
-			#sfutils.logstr("socket bind to " + str(self.bind_addr))
-			#self.sock.connect(self.remote_addr)
+			#print("Bind addr: \n" + self.bind_addr[0] + "\n" + str(self.bind_addr[1]))	
+			sfutils.logdebug(str(self.bind_addr) + " connecting to" + str(self.remote_addr))
 			self.sock = socket.create_connection(self.remote_addr, 10, self.bind_addr)
-			sfutils.logstr("connected to" + str(self.remote_addr))
+			sfutils.logstr(str(self.bind_addr) + " connected to" + str(self.remote_addr))
 		except socket.error as e:
 			print(e)
 			sys.exit(1)
@@ -115,23 +116,35 @@ class SensorTCPProxy(threading.Thread):
 
 
 	def send(self, data):
-		try:
-			self.sock.sendall(bytes(data + "\n", 'UTF-8'))
-			sfutils.logstr(msg=data, screen=False)
-			# Receive data from the server and shut down
-			#received = self.sock.recv(1024)			
-		except socket.error as ex:
-			sfutils.logstr("socket error")
-			logging.info(ex)	
-			print(ex)
-			self.sock.close()
-			self.sock = None
-			sfutils.logstr("reconnecting")
-			self.connect()
+		self.msg_queue.put(data)
 
-		except socket.timeout as ex:
-			logging.info("socket connection timer expired")
-			logging.info(ex)	
+	def thread_worker(self):
+		while True:
+			data = self.msg_queue.get()
+			if data is None:
+				break
+			else:
+				sfutils.logdebug(self.bind_addr[0] + " current queue size = " + str(self.msg_queue.qsize()))
+				try:
+					self.sock.sendall(bytes(data + "\n", 'UTF-8'))
+					sfutils.logstr(msg=data, screen=False)
+					# Receive data from the server and shut down
+					#received = self.sock.recv(1024)			
+				except socket.error as ex:
+					sfutils.logstr("socket error")
+					logging.info(ex)	
+					print(ex)
+					self.sock.close()
+					self.sock = None
+					sfutils.logstr("reconnecting")
+					self.connect()
+
+				except socket.timeout as ex:
+					logging.info("socket connection timer expired")
+					logging.info(ex)	
+
+				# indicate that the message is processed
+				self.msg_queue.task_done()
 
 	def disconnect(self):
 		if self.sock != None:
@@ -140,18 +153,23 @@ class SensorTCPProxy(threading.Thread):
 
 class Rail(object):
 	""" A Rail represents the delay between to machine stations """
-	def __init__(self, env, mach_id, t_delay, remote_addr, bind_addr):
+	def __init__(self, env, mach_id, t_delay, remote_addr, bind_addr, tcpproxy=None):
 		self.env = env
 		self.t_delay = t_delay
 		self.mach_id = mach_id
-		self.rail = simpy.Resource(env,1) # one path out from machine
-		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=bind_addr)
+		self.railResource = simpy.Resource(env,1) # one path out from machine
+		if tcpproxy == None:
+			sfutils.logdebug("For machine " + str(self.mach_id) + " rail, creating tcp proxy")
+			self.tcpproxy = SensorTCPProxy(self.env, remote_addr, bind_addr=bind_addr)
+		else:
+			sfutils.logdebug("For machine " + str(self.mach_id) + " rail, using machine tcp proxy")
+			self.tcpproxy = tcpproxy
 
 	def travel(self, part_id):
 		
 		# optical proximity sensor reading
 		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str="part in transit")
-		self.tcpclient.send_msg(msg)	
+		self.tcpproxy.send_msg(msg)	
 
 		# wait for the transit delay to occur
 		yield self.env.timeout(self.t_delay)
@@ -159,16 +177,19 @@ class Rail(object):
 
 class Machine(object):
 	""" Machines do work on Part objects """
-	def __init__(self, env, mach_id, worktime, num_stations, rail_delay, remote_addr, bind_addr=('127.0.0.1',0)):
+	def __init__(self, env, mach_id, worktime, num_stations, remote_addr, bind_addr=('127.0.0.1',0)):
 		self.env = env
 		self.mach_id = mach_id
 		self.worktime = worktime
 		self.num_parts = 0
 		self.station = simpy.Resource(env, num_stations)
-		self.rail = Rail(env, mach_id, rail_delay, remote_addr, bind_addr)
-		#self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=al.pop_addr())
+		sfutils.logdebug("For machine " + str(self.mach_id) + ", creating tcp proxy")
 		self.tcpclient = SensorTCPProxy(self.env, remote_addr, bind_addr=bind_addr)
-		
+		self.rail = None
+
+	def addRail(self, rail=None):
+		self.rail = rail
+
 	def part_enters(self, part_id):
 		sfutils.loginfo(EventType.PART_ENTER_MACH, env, self.mach_id, part_id, "part entered machine")
 		msg = SensorMessage(part_id=part_id, mach_id=self.mach_id, rail_id=0, msg_str="part entered machine")
@@ -212,7 +233,7 @@ def Part(env, part_id, machines, output_store):
 			yield env.process(mach.work(part_id))
 			sfutils.loginfo(EventType.PART_EXIT_MACH, env, mach.mach_id, part_id, "part exits machine")
 			
-			with mach.rail.rail.request() as rail_request:
+			with mach.rail.railResource.request() as rail_request:
 				
 				yield rail_request
 				sfutils.loginfo(EventType.PART_TRAVEL, env, mach.mach_id, part_id, "part in transit")
@@ -232,6 +253,8 @@ class Factory(object):
 	def __init__(self, num_parts, num_machines, num_stations, worktime, t_inter, remote_addr, output_store_sz=10000):
 
 		# parameters
+		self.machines = []
+		self.rails = []		
 		self.num_parts = num_parts
 		self.num_machines = num_machines
 		self.num_stations = num_stations
@@ -239,32 +262,33 @@ class Factory(object):
 		self.t_inter = t_inter
 		self.remote_addr = remote_addr
 		self.output_store_sz = output_store_sz
+		self.output_store = None
 		
 	def __str__(self, *args, **kwargs):
 		return object.__str__(self, *args, **kwargs)
 
-	def run(self, env):
-		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
-		env.process(self.setup(env))
-
 	def setup(self, env):
 
 		""" Create the factory architecture """
-		machines = []
-		#machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.101',0)))
-		#machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.102',0)))
-		#machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.103',0)))
-		#machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, ('10.20.0.104',0)))
-		machines.append(Machine(env, 1, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[0],0)))
-		machines.append(Machine(env, 2, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[1],0)))
-		machines.append(Machine(env, 3, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[2],0)))
-		machines.append(Machine(env, 4, self.worktime, self.num_stations, 3.0, self.remote_addr, (sfc.client_addrs[3],0)))
+		machine = []
+		rail_delay = sfc.RAIL_DELAY
 
+		for mach_id in range(0,4):
+			machine = Machine(env, mach_id+1, self.worktime, self.num_stations, self.remote_addr, (sfc.client_addrs[mach_id],0))
+			rail = Rail(env, machine.mach_id, rail_delay, self.remote_addr, (sfc.client_addrs[mach_id],0), tcpproxy=None)
+			machine.addRail(rail)
+			self.machines.append(machine)
+			self.rails.append(rail)
 
 		# create the storage bin for product output
-		output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
-		sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, None, "output storage container created with size %d"%output_store.capacity)
+		self.output_store = simpy.resources.container.Container(env, capacity=self.output_store_sz)
+		sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, None, "output storage container created with size %d"%self.output_store.capacity)
 
+	def run(self, env):
+		sfutils.loginfo(EventType.FACTORY_STARTED, env, None, None, "factory starting")		
+		env.process(self.work(env))
+
+	def work(self, env):
 		# Create more parts while the simulation is running
 		part_id = 0
 		while part_id < self.num_parts:
@@ -275,7 +299,7 @@ class Factory(object):
 			yield env.timeout(this_inter)
 
 			# produce new part on the line
-			env.process(Part(env, part_id, machines, output_store))
+			env.process(Part(env, part_id, self.machines, self.output_store))
 			sfutils.loginfo(EventType.PART_ENTER_FACTORY, env, None, part_id, "part created")
 
 			# increment to next part number
@@ -292,10 +316,12 @@ if __name__ == "__main__":
 	
 	# network configuration
 	sfc = SimpleFactoryConfiguration()
-	#print(sfc.client_addrs)
+
+	# prepare random seed	
 	RANDOM_SEED = sfc.RANDOM_SEED
 	random.seed(RANDOM_SEED)
 	
+	# prepare the runtime parameters
 	RUN_RT = sfc.RUN_RT
 	SIM_RT_FACTOR = sfc.SIM_RT_FACTOR 	
 	NUM_PARTS = sfc.NUM_PARTS
@@ -303,23 +329,30 @@ if __name__ == "__main__":
 	NUM_STATIONS = sfc.NUM_STATIONS
 	WORKTIME = sfc.WORKTIME
 	T_INTER = sfc.T_INTER
-	
-	# remote server address
 	REMOTE_ADDR = sfc.server_addr
-	
+	LOGGING_PATH = sfc.logging_path
+	LOGGING_LEVEL = sfc.logging_level
+
 	# configure the logging utility for the plant process
-	logging.basicConfig(filename='sf_plant.log', level=logging.INFO)
+	if LOGGING_LEVEL == "DEBUG":
+		sfutils.init_logging(fname=LOGGING_PATH, level=logging.DEBUG)	
+	else:
+		sfutils.init_logging(fname=LOGGING_PATH, level=logging.INFO)	
+
+	# log header to log file
 	sfutils.logheader()
 
 	# Create an environment and start the setup process
 	if RUN_RT:
 		sfutils.logstr("attempting to run in real-time with wall clock")
-		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=False)
+		env = simpy.rt.RealtimeEnvironment(initial_time=0, factor=SIM_RT_FACTOR, strict=True)
 	else:
 		env = simpy.Environment()
 
 	# create the factory
+	print(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
 	factory = Factory(NUM_PARTS, NUM_MACHINES, NUM_STATIONS, WORKTIME, T_INTER, REMOTE_ADDR)
+	factory.setup(env)
 	factory.run(env)
 
 	# Execute simulation

@@ -1,4 +1,4 @@
 #/bin/sh
-rm *.log
+#rm *.log
 python3 SimpleFactoryFloor.py
 

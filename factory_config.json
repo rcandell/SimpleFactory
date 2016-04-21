@@ -18,6 +18,15 @@
 	"10.20.0.102",
 	"10.20.0.103",
 	"10.20.0.104",
-	"10.20.0.105" ]
+	"10.20.0.105" ],
+
+    "logging": {
+        "path":"/opt/SimpleFactory/log/factory.log",
+        "level":"INFO"
+    },
+
+    "rails": {
+        "delay" : 3.0
+    }
 }
 
