@@ -8,6 +8,7 @@
 import sfutils
 import socket
 import threading
+from SimpleFactoryConfiguration import *
 
 def handler(clientsocket, clientaddr):
     sfutils.logstr("Accepted connection")
@@ -39,12 +40,13 @@ if __name__ == "__main__":
 	# initialize the logger
 	sfutils.init_logging('sf_server.log', sfutils.logging.INFO)    
 
+	sfc = SimpleFactoryConfiguration()
 	host = '10.10.0.100'
 	port = 19999
 	buf = 1024
 
 	#print( "Server address is: " + host + ":" + port   )
-	addr = (host, port)
+	addr = sfc.server_addr #(host, port)
 	print( "Server address is: " + addr[0] + ":" + str(addr[1])   )
 
 	serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

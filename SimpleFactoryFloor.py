@@ -187,7 +187,8 @@ class Machine(object):
 		
 		# do the work
 		sfutils.loginfo(EventType.MACHINE_WORK, env, self.mach_id, part_id, "machine working")
-		yield self.env.timeout(this_work_time)	
+		yield self.env.timeout(this_work_time)
+		self.num_parts = self.num_parts + 1	
 
 		# transmit that machine is done
 		machine_done_str = "machine done" + \
