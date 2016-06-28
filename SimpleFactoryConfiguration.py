@@ -23,6 +23,12 @@ class SimpleFactoryConfiguration:
         self.WORKTIME= self.data["WORKTIME"]      
         self.T_INTER= self.data["T_INTER"]  
         self.server_addr = (self.data['server_addr']['host'], self.data['server_addr']['port'])
+        self.client_addrs = self.data['client_addrs']
+        self.logging_path = self.data['logging']['path']
+        self.logging_level = (self.data['logging']['level']).upper()
+
+        self.RAIL_DELAY = self.data["rails"]["delay"]
+        
         '''
         for ii in range(0, len(self.data['client_addrs'])):
             host = self.data['client_addrs'][ii]['host']

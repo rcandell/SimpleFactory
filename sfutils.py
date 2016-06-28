@@ -3,7 +3,8 @@ import time
 import logging
 
 def init_logging(fname, level=logging.INFO):
-	logging.basicConfig(filename=fname, level=level)
+	logging.basicConfig(filename=fname, level=level, filemode='w')
+	print("log level set to " + logging.getLevelName(logging.getLogger().getEffectiveLevel()))
 
 def logheader():
 	log_str = "wall_clock\tsim_time\tlog_code\tmachine_id\tpart_id\ttext_msg"
@@ -20,6 +21,11 @@ def loginfo(lcode, env, mach_id, part_id, msg):
 def logstr(msg, screen=True):
 	msg = "* " + str(time.time()) + "\t" + msg
 	logging.info(msg)
+	if screen is True:
+		print(msg)
+
+def logdebug(msg, screen=True):
+	logging.debug(msg)
 	if screen is True:
 		print(msg)
 
