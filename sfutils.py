@@ -36,7 +36,7 @@ def logstrjson(msg, screen=True):
 		print(msg)
 		
 def logstrtabdelim(msg, screen=True):
-	msg = str(time.time()) + "\t" + msg
+	msg = (str(time.time()) + "00000")[:17] + "\t" + msg
 	logging.info(msg)
 	if screen is True:
 		print(msg)

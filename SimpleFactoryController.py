@@ -12,7 +12,7 @@ from SimpleFactoryConfiguration import *
 
 def handler(clientsocket, clientaddr):
     sfutils.logstr("Accepted connection")
-    sfutils.logstr(str(clientsocket)) 
+    sfutils.logstr(str(clientsocket))
     
     while 1:
         try:
@@ -20,7 +20,7 @@ def handler(clientsocket, clientaddr):
             data = clientsocket.recv(1024)
             if not data:
                 break
-        except Exception as e:
+        except Exception as e:            
             print(e)
         finally:
             if data is None:

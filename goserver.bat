@@ -1,2 +1,3 @@
 del *.log
-call start python SimpleFactoryController.py
+rem call start python SimpleFactoryController.py
+call python SimpleFactoryController.py
