@@ -1,0 +1,32 @@
+{
+    "RANDOM_SEED": 42,
+    "RUN_RT" : true,
+    "SIM_RT_FACTOR" : 1.0,
+    "SIM_TIME" : 86400, 
+    "NUM_PARTS" : 10000,
+    "NUM_MACHINES" : 4, 
+    "NUM_STATIONS" : 1,  
+    "WORKTIME" : 5,      
+    "T_INTER" : 2,       
+        
+    "server_addr": {
+        "host": "10.20.0.100",
+        "port": 19999},
+
+    "client_addrs": [
+	"10.20.0.101",
+	"10.20.0.102",
+	"10.20.0.103",
+	"10.20.0.104",
+	"10.20.0.105" ],
+
+    "logging": {
+        "path":"/opt/SimpleFactory/log/factory.log",
+        "level":"INFO"
+    },
+
+    "rails": {
+        "delay" : 3.0
+    }
+}
+
